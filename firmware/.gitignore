@@ -1,0 +1,36 @@
+# ============================================================================
+# Firmware Configuration - DO NOT COMMIT CREDENTIALS
+# ============================================================================
+# This file contains sensitive WiFi and MQTT credentials
+# Each developer should create their own config.h locally
+config.h
+
+# ============================================================================
+# Arduino/PlatformIO build artifacts
+# ============================================================================
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+c_cpp_properties.json
+compile_commands.json
+.gcc-flags.json
+.vscode/
+.vscode-pio/
+*.elf
+*.bin
+
+# ============================================================================
+# IDE and editor files
+# ============================================================================
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============================================================================
+# Build directories
+# ============================================================================
+build/
+dist/
