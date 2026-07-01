@@ -6,6 +6,15 @@
 #include "LittleFS.h"
 #include <Wire.h>
 
+// --- LCD Recovery & Watchdog ---
+// Tracks consecutive I2C failures to trigger LCD reinit
+uint8_t lcd_fail_count = 0;
+const uint8_t LCD_FAIL_THRESHOLD = 3; // Reinit after 3 consecutive failures
+uint8_t lcd_i2c_addr = 0x27;          // Will be updated by I2C scan
+bool lcd_healthy = true;
+unsigned long lastLcdCheck = 0;
+const unsigned long LCD_CHECK_INTERVAL = 2000; // Check LCD health every 2s
+
 struct PMSFrame {
   uint16_t pm1_env;
   uint16_t pm25_env;
@@ -53,6 +62,106 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // --- PMS5003 Pins & Struct ---
 #define PMS_RX 16
 #define PMS_TX 17
+
+// ============================================================
+// I2C Bus Recovery & LCD Reinit Functions
+// ============================================================
+
+/**
+ * Bit-bang SCL to recover a stuck I2C bus.
+ * When a voltage dip interrupts an I2C transaction mid-byte,
+ * the slave (LCD) can hold SDA low waiting for clocks.
+ * Sending 9+ clock pulses lets the slave release the bus.
+ */
+void recoverI2CBus() {
+  Serial.println("[LCD] Attempting I2C bus recovery...");
+  Wire.end(); // Release the hardware I2C peripheral
+  
+  // Bit-bang 16 clock pulses on SCL with SDA high
+  pinMode(LCD_SDA, INPUT_PULLUP); // Let SDA float high
+  pinMode(LCD_SCL, OUTPUT);
+  for (int i = 0; i < 16; i++) {
+    digitalWrite(LCD_SCL, LOW);
+    delayMicroseconds(5);
+    digitalWrite(LCD_SCL, HIGH);
+    delayMicroseconds(5);
+  }
+  
+  // Generate STOP condition: SDA low->high while SCL is high
+  pinMode(LCD_SDA, OUTPUT);
+  digitalWrite(LCD_SDA, LOW);
+  delayMicroseconds(5);
+  digitalWrite(LCD_SCL, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(LCD_SDA, HIGH);
+  delayMicroseconds(5);
+  
+  // Re-initialize I2C hardware
+  Wire.begin(LCD_SDA, LCD_SCL);
+  delay(50);
+  Serial.println("[LCD] I2C bus recovery complete.");
+}
+
+/**
+ * Check if the LCD is still responding on the I2C bus.
+ * Returns true if the device ACKs, false otherwise.
+ */
+bool isLcdResponding() {
+  Wire.beginTransmission(lcd_i2c_addr);
+  return (Wire.endTransmission() == 0);
+}
+
+/**
+ * Full LCD reinit sequence: recover bus, then reinit the display.
+ */
+void reinitLcd() {
+  Serial.println("[LCD] *** Reinitializing LCD display ***");
+  recoverI2CBus();
+  delay(100); // Let voltage stabilize after bus recovery
+  
+  lcd = LiquidCrystal_I2C(lcd_i2c_addr, 20, 4);
+  lcd.init();
+  delay(50);
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("LCD Recovered!      ");
+  delay(500);
+  
+  lcd_fail_count = 0;
+  lcd_healthy = true;
+  Serial.println("[LCD] Reinit complete. Display should be back.");
+}
+
+/**
+ * Periodic LCD health check — call from loop().
+ * Detects stuck/blurred display and auto-recovers.
+ */
+void checkLcdHealth() {
+  if (millis() - lastLcdCheck < LCD_CHECK_INTERVAL) return;
+  lastLcdCheck = millis();
+  
+  if (isLcdResponding()) {
+    if (!lcd_healthy) {
+      Serial.println("[LCD] Device responding again — reinitializing.");
+      reinitLcd();
+    }
+    lcd_fail_count = 0;
+    lcd_healthy = true;
+  } else {
+    lcd_fail_count++;
+    Serial.print("[LCD] No ACK from display (fail ");
+    Serial.print(lcd_fail_count);
+    Serial.print("/");
+    Serial.print(LCD_FAIL_THRESHOLD);
+    Serial.println(")");
+    
+    if (lcd_fail_count >= LCD_FAIL_THRESHOLD) {
+      lcd_healthy = false;
+      reinitLcd();
+    }
+  }
+}
 
 
 uint16_t last_pm1 = 12;
@@ -260,6 +369,11 @@ void reconnect() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("  Hospital AQI Node — Booting");
+  Serial.println("  LCD recovery & staggered init enabled");
+  Serial.println("========================================");
 
   // Initialize LittleFS
   if (!LittleFS.begin(true)) {
@@ -271,7 +385,10 @@ void setup() {
   pinMode(LED_RED,    OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
 
-  // Scan I2C bus to auto-detect LCD address using custom pins (SDA=21, SCL=22)
+  // ============================================================
+  // STEP 1: Initialize LCD FIRST (before PMS5003 fan spins up)
+  // This ensures the LCD gets stable power during init.
+  // ============================================================
   Wire.begin(LCD_SDA, LCD_SCL);
   Serial.println("Scanning I2C bus...");
   byte error, address;
@@ -291,6 +408,7 @@ void setup() {
       nDevices++;
     }
   }
+  lcd_i2c_addr = detected_addr; // Store for recovery use
   if (nDevices == 0) {
     Serial.println("No I2C devices found. Check your SDA/SCL wiring.");
   } else {
@@ -302,12 +420,43 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
-  lcd.print("Hospital AQI Node");
-  
-  // Initialize Serial2 for PMS5003 Sensor
+  lcd.print("Hospital AQI Node   ");
+  lcd.setCursor(0, 1);
+  lcd.print("Booting...          ");
+  Serial.println("[LCD] Display initialized successfully.");
+
+  // ============================================================
+  // STEP 2: Small delay to let LCD fully stabilize before
+  // powering up the PMS5003 fan (which causes current spike)
+  // ============================================================
+  delay(1000);
+
+  // ============================================================
+  // STEP 3: NOW initialize PMS5003 (Serial2)
+  // The fan will spin up and draw ~100mA. With the LCD already
+  // stable, the voltage dip is less likely to corrupt the display.
+  // ============================================================
+  Serial.println("[PMS] Initializing PMS5003 sensor...");
+  lcd.setCursor(0, 1);
+  lcd.print("Init PMS5003...     ");
   Serial2.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
+  delay(500); // Let PMS5003 fan stabilize
+  Serial.println("[PMS] PMS5003 ready.");
+
+  // ============================================================
+  // STEP 4: Verify LCD survived the PMS5003 power-on
+  // ============================================================
+  if (!isLcdResponding()) {
+    Serial.println("[LCD] Display lost after PMS5003 init — recovering...");
+    reinitLcd();
+  } else {
+    Serial.println("[LCD] Display OK after PMS5003 init.");
+  }
   
   dht.begin();
+  
+  lcd.setCursor(0, 1);
+  lcd.print("Connecting WiFi...  ");
   setup_wifi();
   
   // Generate persistent client ID using MAC address
@@ -332,12 +481,21 @@ void setup() {
   }
   client.setServer(mqtt_server, mqtt_port);
   client.setBufferSize(MQTT_BUFFER_SIZE);
+
+  lcd.setCursor(0, 1);
+  lcd.print("System Ready!       ");
+  Serial.println("[BOOT] Setup complete. Entering main loop.");
 }
 
 
 
 
 void loop() {
+  // ============================================================
+  // LCD Health Watchdog — detect and recover from blur/freeze
+  // ============================================================
+  checkLcdHealth();
+
   // Check WiFi and MQTT connection status periodically
   static unsigned long lastConnCheck = 0;
   if (millis() - lastConnCheck > 10000) { // Check every 10s
@@ -398,19 +556,43 @@ void loop() {
     AQIResult aqiResult = calculateAQI(pm25);
     setAlertHardware(aqiResult.status, gas_ppm);
 
-    // LCD Display
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("T:"); lcd.print(temp, 1); lcd.print("C H:"); lcd.print(humidity, 0); lcd.print("% G:"); lcd.print(gas_ppm, 0);
-    lcd.setCursor(0, 1);
-    lcd.print("PM2.5:"); lcd.print(pm25, 0); lcd.print(" PM10:"); lcd.print(pm10, 0);
-    lcd.setCursor(0, 2);
-    lcd.print("AQI:"); lcd.print(aqiResult.aqi); lcd.print(" ["); lcd.print(aqiResult.status.substring(0, 7)); lcd.print("]");
-    lcd.setCursor(0, 3);
-    if (client.connected()) {
-      lcd.print("Status: Online     ");
-    } else {
-      lcd.print("Status: Offline (B)");
+    // LCD Display — only update if LCD is healthy (skip writes during recovery)
+    // Overwrite in-place (no lcd.clear()) to prevent flicker.
+    // Pad each line to exactly 20 chars so old content is fully overwritten.
+    if (lcd_healthy) {
+      char lcdLine[21]; // 20 chars + null terminator
+
+      // Row 0: Temperature, Humidity, Gas
+      snprintf(lcdLine, sizeof(lcdLine), "T:%.1fC H:%.0f%% G:%.0f", temp, humidity, gas_ppm);
+      int len = strlen(lcdLine);
+      for (int i = len; i < 20; i++) lcdLine[i] = ' ';
+      lcdLine[20] = '\0';
+      lcd.setCursor(0, 0);
+      lcd.print(lcdLine);
+
+      // Row 1: PM2.5 and PM10
+      snprintf(lcdLine, sizeof(lcdLine), "PM2.5:%.0f PM10:%.0f", pm25, pm10);
+      len = strlen(lcdLine);
+      for (int i = len; i < 20; i++) lcdLine[i] = ' ';
+      lcdLine[20] = '\0';
+      lcd.setCursor(0, 1);
+      lcd.print(lcdLine);
+
+      // Row 2: AQI and Status label
+      snprintf(lcdLine, sizeof(lcdLine), "AQI:%d [%.7s]", aqiResult.aqi, aqiResult.status.c_str());
+      len = strlen(lcdLine);
+      for (int i = len; i < 20; i++) lcdLine[i] = ' ';
+      lcdLine[20] = '\0';
+      lcd.setCursor(0, 2);
+      lcd.print(lcdLine);
+
+      // Row 3: Connection status
+      lcd.setCursor(0, 3);
+      if (client.connected()) {
+        lcd.print("Status: Online      ");
+      } else {
+        lcd.print("Status: Offline (B) ");
+      }
     }
 
     // JSON payload
@@ -427,7 +609,7 @@ void loop() {
       Serial.println("MQTT not connected. Buffering data...");
       saveReadingToFlash(jsonBuffer);
       lcd.setCursor(0, 3);
-      lcd.print("Status: Offline (B)");
+      lcd.print("Status: Offline (B) ");
     } else if (client.publish(mqtt_topic, jsonBuffer)) {
       Serial.println("Published: " + String(jsonBuffer));
     } else {
@@ -436,7 +618,7 @@ void loop() {
       Serial.println("). Buffering data...");
       saveReadingToFlash(jsonBuffer);
       lcd.setCursor(0, 3);
-      lcd.print("Status: Offline (B)");
+      lcd.print("Status: Offline (B) ");
     }
   }
 }
