@@ -16,20 +16,14 @@ struct AQIResult {
   int aqi; 
   String status; 
 };
-// --- WiFi Credentials ---
-const char* ssid = "SM-G981W4501";
-const char* password = "lei1234@";
+#include "config.h"
+#include <WiFiClientSecure.h>
 
-// --- MQTT Broker Settings ---
-const char* mqtt_server = "10.121.196.176"; // Replace with your backend PC's IP address
-const int mqtt_port = 1886; // Updated to match backend MQTT broker port
-const char* mqtt_topic = "hospital/ICU Ward B/airquality";
-const char* mqtt_username = "hospital_node";   // Must match backend .env MQTT_USERNAME
-const char* mqtt_password = "esp32_secure_2026"; // Must match backend .env MQTT_PASSWORD
-String clientId = "ESP32-AQI-Node-";
+String clientId = "ICU Ward B";
 
 WiFiClient espClient;
-PubSubClient client(espClient);
+WiFiClientSecure espClientSecure;
+PubSubClient client; // Set client in setup()
 
 // PubSubClient default buffer can be too small depending on payload size.
 // Increase to reduce edge-case publish failures.
@@ -177,12 +171,17 @@ void syncBufferedData() {
 // --- Set LED + Buzzer based on AQI status ---
 bool isBuzzerActive = false;
 
-void setAlertHardware(String status) {
+void setAlertHardware(String status, float gas_ppm) {
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_YELLOW, LOW);
   digitalWrite(LED_RED, LOW);
 
-  if (status == "GOOD" || status == "MODERATE") {
+  // If gas level exceeds 2500 ppm, trigger high-priority gas leak alarm
+  if (gas_ppm > 2500.0) {
+    digitalWrite(LED_RED, HIGH);
+    tone(BUZZER_PIN, 2500); // Continuous high-frequency alert for gas leaks
+    isBuzzerActive = true;
+  } else if (status == "GOOD" || status == "MODERATE") {
     digitalWrite(LED_GREEN, HIGH);
     if (isBuzzerActive) {
       noTone(BUZZER_PIN);
@@ -318,6 +317,19 @@ void setup() {
   Serial.print("Persistent Client ID: ");
   Serial.println(clientId);
 
+  // Select secure or plain transport based on the configured MQTT port.
+  // Port 8883 = TLS encrypted (production), Port 1886 = plain TCP (local only).
+  if (mqtt_port == 8883) {
+    // setInsecure() enables TLS encryption without certificate verification.
+    // Encrypts all traffic including MQTT credentials, preventing passive sniffing.
+    // For full MITM protection, load a Root CA with setCACert() instead.
+    espClientSecure.setInsecure();
+    client.setClient(espClientSecure);
+    Serial.println("MQTT: Using TLS/SSL (secure, port 8883)");
+  } else {
+    client.setClient(espClient);
+    Serial.println("MQTT: Using plain TCP (insecure, local dev only)");
+  }
   client.setServer(mqtt_server, mqtt_port);
   client.setBufferSize(MQTT_BUFFER_SIZE);
 }
@@ -384,7 +396,7 @@ void loop() {
     int tvoc = random(10, 100);
 
     AQIResult aqiResult = calculateAQI(pm25);
-    setAlertHardware(aqiResult.status);
+    setAlertHardware(aqiResult.status, gas_ppm);
 
     // LCD Display
     lcd.clear();

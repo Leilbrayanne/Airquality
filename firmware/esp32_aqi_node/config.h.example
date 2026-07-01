@@ -1,0 +1,15 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// --- WiFi Credentials ---
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// --- MQTT Broker Settings ---
+const char* mqtt_server = "YOUR_BACKEND_IP_OR_HOST"; // Replace with your backend PC's IP address
+const int mqtt_port = 8883; // 8883 for secure TLS, 1886 for unencrypted
+const char* mqtt_topic = "hospital/ICU Ward B/airquality";
+const char* mqtt_username = "hospital_node";   // Must match backend .env MQTT_USERNAME
+const char* mqtt_password = "YOUR_MQTT_PASSWORD"; // Must match backend .env MQTT_PASSWORD
+
+#endif // CONFIG_H

@@ -3,7 +3,14 @@ dist/
 build/
 .env
 .env.local
+.env.production
 backend/mongodb_data/
 .DS_Store
 .vscode/
 /.history/
+
+# Firmware secrets (WiFi, MQTT credentials)
+firmware/esp32_aqi_node/config.h
+
+# Test utilities
+test_endpoints.ps1

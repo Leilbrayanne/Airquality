@@ -6,6 +6,13 @@ const Room = require('./models/Room');
 require('dotenv').config();
 
 async function seed() {
+  // Safety guard: refuse to wipe and re-seed in production.
+  // Running this would immediately delete ALL users, rooms, and thresholds.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SETUP_IN_PROD !== 'true') {
+    console.error('✗ Refusing to run seed in production. Set ALLOW_SETUP_IN_PROD=true to override.');
+    process.exit(1);
+  }
+
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/hospital_aqi');
   
   // Clear existing

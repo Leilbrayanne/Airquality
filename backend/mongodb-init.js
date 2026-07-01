@@ -4,9 +4,15 @@
 db = db.getSiblingDB('admin');
 
 // Create application user with proper permissions
+const appPassword = process.env.MONGO_APP_PASSWORD;
+if (!appPassword) {
+  print('ERROR: MONGO_APP_PASSWORD environment variable is not set. Aborting init.');
+  quit(1);
+}
+
 db.createUser({
   user: "pureair_app",
-  pwd: passwordPrompt(), // Will be set via environment variable
+  pwd: appPassword,
   roles: [
     { role: "readWrite", db: "hospital_aqi" },
     { role: "read", db: "admin" }

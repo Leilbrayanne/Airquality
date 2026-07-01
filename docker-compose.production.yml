@@ -8,6 +8,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: pureair_admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: hospital_aqi
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
     ports:
       - "27017:27017"
     volumes:
@@ -79,8 +80,8 @@ services:
       dockerfile: Dockerfile
     container_name: pureair-client
     restart: unless-stopped
-    ports:
-      - "80:80"      # Production Web Port
+    expose:
+      - "80"
     environment:
       - VITE_API_URL=http://localhost:5002
     depends_on:

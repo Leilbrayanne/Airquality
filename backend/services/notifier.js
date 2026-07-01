@@ -256,6 +256,7 @@ async function sendEmailAlert(room, alertData, recipients, history) {
   let pdfBuffer;
   try {
     pdfBuffer = await generatePDFBuffer(room, alertData, history);
+    require('fs').writeFileSync('alert_report.pdf', pdfBuffer);
   } catch (err) {
     console.error("Failed to generate PDF buffer:", err);
   }

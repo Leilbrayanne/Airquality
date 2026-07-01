@@ -33,15 +33,15 @@ services:
       - "1886:1886"  # Aedes MQTT Broker Port
     environment:
       - PORT=5002
+      - NODE_ENV=development
       - MQTT_PORT=1886
       - MQTT_BROKER_URL=mqtt://pureair-backend:1886
       - MQTT_USERNAME=hospital_node
-      - MQTT_PASSWORD=esp32_secure_2026
-      - JWT_SECRET=0edd40ac1f0c956227e793c1ec567011a7c9699b36e2287f9b01c8ff024258190e73b2d6efdf98b846d6fcebb286d8fe6fba9398f1fbb668fb4c0099768c4ba3
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-dev_mqtt_password_for_testing}
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_in_production}
       - MONGODB_URI=mongodb://mongodb:27017/hospital_aqi
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - NODE_ENV=production
     depends_on:
       - mongodb
       - redis

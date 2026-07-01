@@ -128,8 +128,22 @@ async function setupAedesBroker(io) {
     }
 
     // 3️⃣ Fallback to classic username/password auth (if JWT not enabled)
-    const validUser = username === MQTT_USERNAME;
-    const validPass = password && password.toString() === MQTT_PASSWORD;
+    // Use timing-safe comparison to prevent credential-harvesting timing attacks.
+    const crypto = require('crypto');
+    const safeCompare = (a, b) => {
+      if (!a || !b) return false;
+      const aBuf = Buffer.from(String(a));
+      const bBuf = Buffer.from(String(b));
+      if (aBuf.length !== bBuf.length) {
+        // Run dummy comparison on equal-length buffers to prevent length leaks
+        crypto.timingSafeEqual(aBuf, aBuf);
+        return false;
+      }
+      return crypto.timingSafeEqual(aBuf, bBuf);
+    };
+
+    const validUser = safeCompare(username, MQTT_USERNAME);
+    const validPass = safeCompare(password && password.toString(), MQTT_PASSWORD);
     if (validUser && validPass) {
       return callback(null, true);
     }

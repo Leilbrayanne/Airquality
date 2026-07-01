@@ -1,7 +1,8 @@
 # PureAir Monitoring System
 
 > **Real‑time air quality monitoring for hospitals and indoor environments**
-
+<!-- SMTP_USER=leibrayanne@gmail.com
+SMTP_PASS=zrye obdv gffd kual -->
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## 📖 Overview
@@ -31,6 +32,9 @@ The system supports both **offline buffering** (via LittleFS) and **integration 
 - **DevOps** – Docker, Docker‑Compose, CI/CD (optional)
 
 ---
+
+## 🚀 Production Deployment
+For production deployments, including secure Docker configurations, SSL/TLS reverse proxy setups, and firmware credentials isolation, see the **[Production Deployment Guide](file:///c:/Users/Lei/Desktop/AntiGravity/DEPLOYMENT.md)**.
 
 ## 📦 Quick Start (Local Development)
 ### Prerequisites
@@ -584,7 +588,7 @@ Before configuring the webhook, you must register the sensor as a node in the Pu
 1. Connect to your PurpleAir sensor's local configuration utility (refer to PurpleAir user guide).
 2. Find the **Webhook / Local Push** settings.
 3. Configure the following:
-   - **Webhook URL**: `http://<YOUR_BACKEND_IP>:5001/api/sensors/purpleair`
+   - **Webhook URL**: `http://<YOUR_BACKEND_IP>:5002/api/sensors/purpleair`
    - **Interval**: e.g., every 80 or 120 seconds.
    - **Data Format**: Standard JSON.
 
@@ -626,4 +630,5 @@ node verify_fixes.js
 
 ---
 
-**Status**: ✅ **Production-ready with all security issues resolved**
+**Status**: ✅ **Production-ready with all security issues resolved**#   A i r _ q u a l i t y  
+ 

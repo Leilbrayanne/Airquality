@@ -24,7 +24,8 @@ router.get('/export/:roomIdStr', verifyToken, reportLimiter, asyncHandler(async 
   const csv = parser.parse(history);
 
   res.header('Content-Type', 'text/csv');
-  res.attachment(`hospital_iaq_${req.params.roomIdStr}_${new Date().toISOString().slice(0, 10)}.csv`);
+  // Use room.roomId from DB (not raw route param) to prevent header injection
+  res.attachment(`hospital_iaq_${room.roomId}_${new Date().toISOString().slice(0, 10)}.csv`);
   return res.send(csv);
 }));
 
@@ -38,7 +39,8 @@ router.get('/pdf/:roomIdStr', verifyToken, reportLimiter, asyncHandler(async (re
   if (history.length === 0) return res.status(404).json({ error: 'No data found for this room' });
 
   const doc = new PDFDocument({ margin: 50, size: 'A4' });
-  const filename = `hospital_iaq_${req.params.roomIdStr}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  // Use room.roomId from DB (not raw route param) to prevent header injection
+  const filename = `hospital_iaq_${room.roomId}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
