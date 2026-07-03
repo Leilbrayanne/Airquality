@@ -14,6 +14,9 @@ uint8_t lcd_i2c_addr = 0x27;          // Will be updated by I2C scan
 bool lcd_healthy = true;
 unsigned long lastLcdCheck = 0;
 const unsigned long LCD_CHECK_INTERVAL = 2000; // Check LCD health every 2s
+const unsigned long LCD_WRITE_RETRY_DELAY = 20; // Short delay before retry on transient I2C errors
+const unsigned long LCD_RECOVERY_PAUSE_MS = 1500; // Pause LCD updates after sensor startup or recovery
+unsigned long lcd_pause_until = 0;
 
 struct PMSFrame {
   uint16_t pm1_env;
@@ -124,6 +127,7 @@ void reinitLcd() {
   delay(50);
   lcd.backlight();
   lcd.clear();
+  lcd_pause_until = millis() + LCD_RECOVERY_PAUSE_MS;
   lcd.setCursor(0, 0);
   lcd.print("LCD Recovered!      ");
   delay(500);
@@ -366,6 +370,30 @@ void reconnect() {
   }
 }
 
+bool writeLcdLine(uint8_t row, const char *text) {
+  if (!lcd_healthy) return false;
+  if (millis() < lcd_pause_until) return false;
+
+  if (!isLcdResponding()) {
+    Serial.println("[LCD] Display not responding before update.");
+    lcd_healthy = false;
+    reinitLcd();
+    return false;
+  }
+
+  lcd.setCursor(0, row);
+  lcd.print(text);
+  delay(LCD_WRITE_RETRY_DELAY);
+
+  if (!isLcdResponding()) {
+    Serial.println("[LCD] Display stopped responding during update.");
+    lcd_healthy = false;
+    reinitLcd();
+    return false;
+  }
+
+  return true;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -389,7 +417,10 @@ void setup() {
   // STEP 1: Initialize LCD FIRST (before PMS5003 fan spins up)
   // This ensures the LCD gets stable power during init.
   // ============================================================
+  pinMode(LCD_SDA, INPUT_PULLUP);
+  pinMode(LCD_SCL, INPUT_PULLUP);
   Wire.begin(LCD_SDA, LCD_SCL);
+  Wire.setClock(100000L);
   Serial.println("Scanning I2C bus...");
   byte error, address;
   int nDevices = 0;
@@ -437,10 +468,10 @@ void setup() {
   // stable, the voltage dip is less likely to corrupt the display.
   // ============================================================
   Serial.println("[PMS] Initializing PMS5003 sensor...");
-  lcd.setCursor(0, 1);
-  lcd.print("Init PMS5003...     ");
+  writeLcdLine(1, "Init PMS5003...     ");
   Serial2.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
-  delay(500); // Let PMS5003 fan stabilize
+  delay(1000); // Let PMS5003 fan stabilize and power rails settle
+  lcd_pause_until = millis() + LCD_RECOVERY_PAUSE_MS;
   Serial.println("[PMS] PMS5003 ready.");
 
   // ============================================================
@@ -455,8 +486,7 @@ void setup() {
   
   dht.begin();
   
-  lcd.setCursor(0, 1);
-  lcd.print("Connecting WiFi...  ");
+  writeLcdLine(1, "Connecting WiFi...  ");
   setup_wifi();
   
   // Generate persistent client ID using MAC address
@@ -482,8 +512,7 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setBufferSize(MQTT_BUFFER_SIZE);
 
-  lcd.setCursor(0, 1);
-  lcd.print("System Ready!       ");
+  writeLcdLine(1, "System Ready!       ");
   Serial.println("[BOOT] Setup complete. Entering main loop.");
 }
 
@@ -567,31 +596,41 @@ void loop() {
       int len = strlen(lcdLine);
       for (int i = len; i < 20; i++) lcdLine[i] = ' ';
       lcdLine[20] = '\0';
-      lcd.setCursor(0, 0);
-      lcd.print(lcdLine);
+      if (!writeLcdLine(0, lcdLine)) {
+        lcd_healthy = false;
+      }
 
       // Row 1: PM2.5 and PM10
-      snprintf(lcdLine, sizeof(lcdLine), "PM2.5:%.0f PM10:%.0f", pm25, pm10);
-      len = strlen(lcdLine);
-      for (int i = len; i < 20; i++) lcdLine[i] = ' ';
-      lcdLine[20] = '\0';
-      lcd.setCursor(0, 1);
-      lcd.print(lcdLine);
+      if (lcd_healthy) {
+        snprintf(lcdLine, sizeof(lcdLine), "PM2.5:%.0f PM10:%.0f", pm25, pm10);
+        len = strlen(lcdLine);
+        for (int i = len; i < 20; i++) lcdLine[i] = ' ';
+        lcdLine[20] = '\0';
+        if (!writeLcdLine(1, lcdLine)) {
+          lcd_healthy = false;
+        }
+      }
 
       // Row 2: AQI and Status label
-      snprintf(lcdLine, sizeof(lcdLine), "AQI:%d [%.7s]", aqiResult.aqi, aqiResult.status.c_str());
-      len = strlen(lcdLine);
-      for (int i = len; i < 20; i++) lcdLine[i] = ' ';
-      lcdLine[20] = '\0';
-      lcd.setCursor(0, 2);
-      lcd.print(lcdLine);
+      if (lcd_healthy) {
+        snprintf(lcdLine, sizeof(lcdLine), "AQI:%d [%.7s]", aqiResult.aqi, aqiResult.status.c_str());
+        len = strlen(lcdLine);
+        for (int i = len; i < 20; i++) lcdLine[i] = ' ';
+        lcdLine[20] = '\0';
+        if (!writeLcdLine(2, lcdLine)) {
+          lcd_healthy = false;
+        }
+      }
 
       // Row 3: Connection status
-      lcd.setCursor(0, 3);
-      if (client.connected()) {
-        lcd.print("Status: Online      ");
-      } else {
-        lcd.print("Status: Offline (B) ");
+      if (lcd_healthy) {
+        char statusLine[21];
+        if (client.connected()) {
+          snprintf(statusLine, sizeof(statusLine), "Status: Online      ");
+        } else {
+          snprintf(statusLine, sizeof(statusLine), "Status: Offline (B) ");
+        }
+        writeLcdLine(3, statusLine);
       }
     }
 
@@ -608,8 +647,7 @@ void loop() {
     if (!client.connected()) {
       Serial.println("MQTT not connected. Buffering data...");
       saveReadingToFlash(jsonBuffer);
-      lcd.setCursor(0, 3);
-      lcd.print("Status: Offline (B) ");
+      writeLcdLine(3, "Status: Offline (B) ");
     } else if (client.publish(mqtt_topic, jsonBuffer)) {
       Serial.println("Published: " + String(jsonBuffer));
     } else {
@@ -617,8 +655,7 @@ void loop() {
       Serial.print(client.state());
       Serial.println("). Buffering data...");
       saveReadingToFlash(jsonBuffer);
-      lcd.setCursor(0, 3);
-      lcd.print("Status: Offline (B) ");
+      writeLcdLine(3, "Status: Offline (B) ");
     }
   }
 }
