@@ -124,6 +124,11 @@ export default function StaffDashboard() {
     return color ? `${color}18` : `${c.textFaint}20`
   }
 
+  const severityColor = { CRITICAL: c.danger, HIGH: c.danger, MEDIUM: c.warning, LOW: c.success }
+  const severityBg    = { CRITICAL: c.dangerBg, HIGH: c.dangerBg, MEDIUM: c.warningBg, LOW: c.successBg }
+  const getSeverityColor = (sev) => severityColor[String(sev || '').toUpperCase()] || c.textFaint
+  const getSeverityBg    = (sev) => severityBg[String(sev || '').toUpperCase()] || `${c.textFaint}20`
+
   const counts = sensorData.reduce((acc, d) => {
     const s = String(d.latest?.aqi_status || 'Offline').toUpperCase()
     if (s === 'GOOD') acc.safe++
@@ -239,14 +244,14 @@ export default function StaffDashboard() {
           {alerts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', background: c.bgCard, borderRadius: 16, color: c.textFaint }}>No active clinical alerts</div>
           ) : alerts.map((a, i) => (
-            <div key={a._id || i} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderLeft: `4px solid ${getStatusColor(a.status)}`, borderRadius: 14, padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, opacity: a.status === 'ACKNOWLEDGED' ? 0.6 : 1 }}>
+            <div key={a._id || i} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderLeft: `4px solid ${getSeverityColor(a.severity)}`, borderRadius: 14, padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, opacity: a.status === 'ACKNOWLEDGED' ? 0.6 : 1 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: c.text }}>{a.room?.name || 'Unknown Room'}</div>
-                <div style={{ color: c.textSec, fontSize: 13 }}>{a.parameter}: <strong style={{ color: getStatusColor(a.status) }}>{a.value} {a.parameter.toLowerCase().includes('pm') ? 'µg/m³' : a.parameter.toLowerCase().includes('tvoc') ? 'ppb' : a.parameter.toLowerCase().includes('temp') ? '°C' : '%'}</strong></div>
+                <div style={{ color: c.textSec, fontSize: 13 }}>{a.parameter}: <strong style={{ color: getSeverityColor(a.severity) }}>{a.value} {a.parameter.toLowerCase().includes('pm') ? 'µg/m³' : a.parameter.toLowerCase().includes('tvoc') ? 'ppb' : a.parameter.toLowerCase().includes('temp') ? '°C' : '%'}</strong></div>
                 <div style={{ color: c.textFaint, fontSize: 12, marginTop: 4 }}>{new Date(a.triggeredAt).toLocaleString()}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                <span style={{ background: getStatusBg(a.status), color: getStatusColor(a.status), padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{a.status}</span>
+                <span style={{ background: getSeverityBg(a.severity), color: getSeverityColor(a.severity), padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{a.severity}</span>
                 {a.status !== 'ACKNOWLEDGED'
                   ? <button onClick={() => acknowledge(a._id)} style={{ background: c.successBg, border: `1px solid rgba(46,213,115,0.3)`, color: c.success, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Acknowledge</button>
                   : <span style={{ color: c.success, fontSize: 12, fontWeight: 600 }}>Acknowledged</span>

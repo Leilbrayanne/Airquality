@@ -580,7 +580,6 @@ void loop() {
     float pm25 = last_pm25;
     float pm10 = last_pm10;
     int eco2 = random(400, 600);
-    int tvoc = random(10, 100);
 
     AQIResult aqiResult = calculateAQI(pm25);
     setAlertHardware(aqiResult.status, gas_ppm);
@@ -637,7 +636,7 @@ void loop() {
     // JSON payload
     StaticJsonDocument<256> doc;
     doc["pm1"] = pm1; doc["pm25"] = pm25; doc["pm10"] = pm10;
-    doc["tvoc"] = tvoc; doc["eco2"] = eco2;
+    doc["eco2"] = eco2;
     doc["temperature"] = temp; doc["humidity"] = humidity; doc["gas"] = gas_ppm;
     doc["timestamp"] = millis(); // Local timestamp for ordering if buffered
     
