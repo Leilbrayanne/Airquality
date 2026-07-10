@@ -331,12 +331,14 @@ void setup_wifi() {
   } else {
     Serial.println("\n");
     Serial.println("==================================================");
-    Serial.println("CRITICAL ERROR: Failed to connect to WiFi!");
+    Serial.println("WARNING: Failed to connect to WiFi!");
     Serial.println("==================================================");
-    Serial.println("1. Double check your password is correct.");
-    Serial.println("2. Make sure your phone hotspot is set to 2.4 GHz, NOT 5 GHz.");
-    Serial.println("The program will now halt. Reset the board to try again.");
-    while(true) { delay(1000); } // Halt the program completely
+    Serial.println("Proceeding in offline mode. Data will be buffered to flash.");
+    
+    // Bypass writeLcdLine to guarantee this message displays
+    lcd.setCursor(0, 1);
+    lcd.print("WiFi Failed-Offline ");
+    delay(2000); // Give user a chance to read it
   }
 }
 
@@ -486,7 +488,9 @@ void setup() {
   
   dht.begin();
   
-  writeLcdLine(1, "Connecting WiFi...  ");
+  // Bypass writeLcdLine cooldown to guarantee this critical message displays
+  lcd.setCursor(0, 1);
+  lcd.print("Connecting WiFi...  ");
   setup_wifi();
   
   // Generate persistent client ID using MAC address

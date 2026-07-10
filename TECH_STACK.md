@@ -54,7 +54,7 @@ This document outlines the languages, frameworks, libraries, and tools used acro
 | Framework / Library | Version | Function |
 | :--- | :--- | :--- |
 | **React** | v19.2.4 | The core UI library used to build the single-page application (SPA). Allows for modular, reusable interface components. |
-| **Vite** | v8.0.1 | The ultra-fast build tool and development server used to run and bundle the React frontend. |
+| **Vite** | v8.0.1 | The ultra-fast build tool and development server used to run and bundle the React frontend. | file
 | **React Router** | v7.18.0 | Handles navigation between different pages (like Dashboard, Settings, Login) without reloading the browser. |
 | **Fetch API** | Native | Standard browser interface for fetching resources, used to make HTTP requests from the React frontend to the Express backend. |
 

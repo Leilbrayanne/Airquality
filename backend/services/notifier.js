@@ -115,7 +115,7 @@ async function processReadingForAlerts(reading, room, io) {
       });
       
       // Send email if critical AND NOT in maintenance mode
-      if ((alertData.severity === 'CRITICAL' || alertData.severity === 'HIGH') && !config.maintenanceMode) {
+      if (alertData.severity === 'CRITICAL' && !config.maintenanceMode) {
         // Automatically include active admins
         const admins = await User.find({ role: 'ADMIN', is_active: true, email: { $exists: true, $ne: '' } });
         const adminRecipients = admins.map(admin => ({ email: admin.email, isActive: true }));
@@ -255,8 +255,8 @@ async function sendEmailAlert(room, alertData, recipients, history) {
   
   let pdfBuffer;
   try {
-    pdfBuffer = await generatePDFBuffer(room, alertData, history);
-    require('fs').writeFileSync('alert_report.pdf', pdfBuffer);
+    // pdfBuffer = await generatePDFBuffer(room, alertData, history);
+    // require('fs').writeFileSync('alert_report.pdf', pdfBuffer);
   } catch (err) {
     console.error("Failed to generate PDF buffer:", err);
   }
